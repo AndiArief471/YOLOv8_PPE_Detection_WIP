@@ -1,21 +1,26 @@
 from ultralytics import YOLO
 import cv2
 import numpy as np
-import supervision as sv
+
+def click_event(event, x, y, flags, params):
+    global clicked_points
+    # checking for left mouse clicks
+    if event == cv2.EVENT_LBUTTONDOWN:
+        # appending the clicked point to the list
+        clicked_points.append((x, y))
 
 #Object detection model & webcam
-model = YOLO('yolov8n.pt')
-cap = cv2.VideoCapture(0)
+model = YOLO('Person.pt')
+model2 = YOLO('APD.pt')
+cap = cv2.VideoCapture('APD Project/CCTV_FAD_output2.mp4')
 cap.set(3, 1280)
 cap.set(4, 720)
 
 color = (0, 0, 255)
-names = model.names
+names = model2.names
 
-#Supervision bounding box
-box_annotator = sv.BoxAnnotator(thickness=2,
-                                text_thickness=0,
-                                text_scale=0,)
+clicked_points = []
+line_visible = False
 #Main loop
 while True:
     #Get each frame from webcam
@@ -45,23 +50,48 @@ while True:
                           cv2.bitwise_and(black_background, black_background, mask=255 - masks[i]))
 
         #Second prediction to detect PPE
-        detect2 = model.predict(result2, classes=[67, 39], show_labels=False)
+        detect2 = model2.predict(result2, show_labels=False)
         PPE = []
         for d in detect2:
             for j in d.boxes.cls:
                 PPE.append(names[int(j)])
 
-        #Change the color of person[i] bounding box
-        if PPE.count("cell phone") == 1 and PPE.count("bottle") == 1:
+        if "No Helmet" in PPE:
+            color = (0, 0, 255)
+        elif "No Glove" in PPE:
+            color = (0, 255, 255)
+        elif "Helmet" in PPE and "Glove" in PPE and "Boot" in PPE:
             color = (0, 255, 0)
         else:
-            color = (0, 0, 255)
+            color = (255, 0, 0)
+
+        #Change the color of person[i] bounding box
+        print(f"detected PPE = {PPE}")
+        print(color)
+        # if PPE.count("Helmet") > 0:
+        #     color = (0, 255, 255)
+        #     if PPE.count("Boot") > 0:
+        #         color = (0, 255, 0)
+        # else:
+        #     color = (0, 0, 255)
 
         #Draw person[i] bounding box
         cv2.rectangle(frame, (int(person[i][0]), int(person[i][1])), (int(person[i][2]), int(person[i][3])), color, 2)
 
+    for point in clicked_points:
+        cv2.circle(frame, point, 5, (255, 0, 0), -1)
+
+    if line_visible == True:
+        pts = np.array(clicked_points, np.int32)
+        cv2.polylines(frame, [pts], True, (255, 0, 0))
+    else:
+        if (cv2.waitKey(30) == 32):
+            line_visible = True
     #Show the frame
     cv2.imshow('Image with Shapes on Black Background', frame)
+
+    cv2.setMouseCallback('Image with Shapes on Black Background', click_event)
+    print(clicked_points)
 
     if (cv2.waitKey(1) == 27):
         break
